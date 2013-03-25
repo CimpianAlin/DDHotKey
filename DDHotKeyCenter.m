@@ -72,6 +72,7 @@ NSString* dd_stringifyModifierFlags(NSUInteger flags);
 	NSUInteger modifierFlags;
 	UInt32 hotKeyID;
 	NSValue * hotKeyRef;
+	BOOL isOnKeyRelease;
 }
 
 @property (nonatomic, retain) id target;
@@ -81,6 +82,7 @@ NSString* dd_stringifyModifierFlags(NSUInteger flags);
 @property (nonatomic) NSUInteger modifierFlags;
 @property (nonatomic) UInt32 hotKeyID;
 @property (nonatomic, retain) NSValue * hotKeyRef;
+@property (nonatomic) BOOL isOnKeyRelease;
 
 #if NS_BLOCKS_AVAILABLE
 @property (nonatomic, copy) DDHotKeyTask task;
@@ -94,7 +96,7 @@ NSString* dd_stringifyModifierFlags(NSUInteger flags);
 
 @implementation _DDHotKey
 
-@synthesize target, action, object, keyCode, modifierFlags, hotKeyID, hotKeyRef;
+@synthesize target, action, object, keyCode, modifierFlags, hotKeyID, hotKeyRef, isOnKeyRelease;
 #if NS_BLOCKS_AVAILABLE
 @synthesize task;
 #endif
@@ -167,10 +169,9 @@ NSString* dd_stringifyModifierFlags(NSUInteger flags);
 	if (self == [DDHotKeyCenter class] && _registeredHotKeys == nil) {
 		_registeredHotKeys = [[NSMutableSet alloc] init];
 		_nextHotKeyID = 1;
-		EventTypeSpec eventSpec;
-		eventSpec.eventClass = kEventClassKeyboard;
-		eventSpec.eventKind = kEventHotKeyReleased;
-		InstallApplicationEventHandler(&dd_hotKeyHandler, 1, &eventSpec, NULL, NULL);
+		EventTypeSpec eventSpec[2] = {{kEventClassKeyboard, kEventHotKeyPressed}, 
+			{kEventClassKeyboard, kEventHotKeyReleased}};
+		InstallApplicationEventHandler(&dd_hotKeyHandler, 2, &eventSpec, NULL, NULL);
 	}
 }
 
@@ -184,7 +185,7 @@ NSString* dd_stringifyModifierFlags(NSUInteger flags);
 }
 
 #if NS_BLOCKS_AVAILABLE
-- (BOOL) registerHotKeyWithKeyCode:(unsigned short)keyCode modifierFlags:(NSUInteger)flags task:(DDHotKeyTask)task {
+- (BOOL) registerHotKeyWithKeyCode:(unsigned short)keyCode modifierFlags:(NSUInteger)flags task:(DDHotKeyTask)task inIsOnKeyRelease:(BOOL)keyRelease {
 	//we can't add a new hotkey if something already has this combo
 	if ([self hasRegisteredHotKeyWithKeyCode:keyCode modifierFlags:flags]) { return NO; }
 	
@@ -192,6 +193,7 @@ NSString* dd_stringifyModifierFlags(NSUInteger flags);
 	[newHotKey setTask:task];
 	[newHotKey setKeyCode:keyCode];
 	[newHotKey setModifierFlags:flags];
+	[newHotKey setIsOnKeyRelease:keyRelease];
 	
 	BOOL success = [newHotKey registerHotKey];
 	if (success) {
@@ -203,7 +205,7 @@ NSString* dd_stringifyModifierFlags(NSUInteger flags);
 }
 #endif
 
-- (BOOL) registerHotKeyWithKeyCode:(unsigned short)keyCode modifierFlags:(NSUInteger)flags target:(id)target action:(SEL)action object:(id)object {
+- (BOOL) registerHotKeyWithKeyCode:(unsigned short)keyCode modifierFlags:(NSUInteger)flags target:(id)target action:(SEL)action object:(id)object inIsOnKeyRelease:(BOOL)keyRelease {
 	//we can't add a new hotkey if something already has this combo
 	if ([self hasRegisteredHotKeyWithKeyCode:keyCode modifierFlags:flags]) { return NO; }
 	
@@ -214,6 +216,7 @@ NSString* dd_stringifyModifierFlags(NSUInteger flags);
 	[newHotKey setObject:object];
 	[newHotKey setKeyCode:keyCode];
 	[newHotKey setModifierFlags:flags];
+	[newHotKey setIsOnKeyRelease:keyRelease];
 	
 	BOOL success = [newHotKey registerHotKey];
 	if (success) {
@@ -275,11 +278,24 @@ OSStatus dd_hotKeyHandler(EventHandlerCallRef nextHandler, EventRef theEvent, vo
 	NSSet * matchingHotKeys = [_registeredHotKeys filteredSetUsingPredicate:[NSPredicate predicateWithFormat:@"hotKeyID = %u", keyID]];
 	if ([matchingHotKeys count] > 1) { NSLog(@"ERROR!"); }
 	_DDHotKey * matchingHotKey = [matchingHotKeys anyObject];
+	if(![matchingHotKey isOnKeyRelease] && GetEventKind(theEvent) == kEventHotKeyReleased)
+	{
+		return noErr;
+	}
 	
 	NSEvent * event = [NSEvent eventWithEventRef:theEvent];
-	NSEvent * keyEvent = [NSEvent keyEventWithType:NSKeyUp 
+	NSEventType type;
+	if(GetEventKind(theEvent) == kEventHotKeyReleased)
+	{
+		type = NSKeyUp;
+	}
+	else
+	{
+		type = NSKeyDown;
+	}
+	NSEvent * keyEvent = [NSEvent keyEventWithType:type
 										  location:[event locationInWindow] 
-									 modifierFlags:[event modifierFlags]
+									 modifierFlags:[matchingHotKey modifierFlags]
 										 timestamp:[event timestamp] 
 									  windowNumber:-1 
 										   context:nil 
