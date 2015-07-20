@@ -1,0 +1,125 @@
+<project name="globalshortcut-native" default="help-native">
+  <import file="../../build.xml"/>
+
+  <!-- additionnal property -->
+  <property name="obj" value="src/native/native_obj" />
+
+  <!-- load cpptasks jar to have <cc /> tag -->
+  <taskdef resource="cpptasks.tasks">
+    <!-- load cpptasks jar -->
+    <classpath>
+      <pathelement location="lib/installer-exclude/cpptasks.jar"/>
+    </classpath>
+  </taskdef>
+
+  <condition property="arch" value="32">
+    <or>
+      <os arch="x86" />
+      <os arch="i386" />
+      <os arch="i486" />
+      <os arch="i586" />
+      <os arch="i686" />
+    </or>
+  </condition>
+  <condition property="arch" value="64">
+    <or>
+      <os arch="amd64" />
+      <os arch="x86_64" />
+    </or>
+  </condition>
+
+  <!--
+    Cross compilation. It is mainly used on Linux to cross-compile 32-bit
+    binaries on a 64-bit host. It is also used to compile ffmpeg on Mac OS X for
+    each architecture before creating an universal binary with the lipo tool. 
+  -->
+  <condition property="cross_32" value="y" >
+    <equals arg1="${arch}" arg2="32" />
+  </condition>
+
+  <condition property="cross_64" value="y" >
+    <equals arg1="${arch}" arg2="64" />
+  </condition>
+
+  <condition property="native_install_dir" value="${native.libs}/mac">
+    <isset property="is.running.macos"/>
+  </condition>
+
+  <target name="init-native" description="Initialize native stuff">
+    <mkdir dir="${obj}" />
+  </target>
+
+    <target name="globalshortcut" description="Build globalshortcut"
+            depends="init-native,globalshortcut-windows" unless="is.running.windows">
+
+    <cc outtype="shared" name="gcc" outfile="${native_install_dir}/globalshortcut"
+        objdir="${obj}">
+        <!-- common compiler flags -->
+        <compilerarg value="-Wall" />
+        <compilerarg value="-Wextra" />
+
+        <compilerarg value="-m32" if="cross_32" unless="is.running.macos" />
+        <compilerarg value="-m64" if="cross_64" unless="is.running.macos" />
+        <linkerarg value="-m32" if="cross_32" unless="is.running.macos" />
+        <linkerarg value="-m64" if="cross_64" unless="is.running.macos" />
+
+        <!-- Mac OS X specific flags -->
+        <compilerarg value="-mmacosx-version-min=10.5" if="is.running.macos"/>
+        <compilerarg value="-O2" if="is.running.macos"/>
+        <compilerarg value="-arch" if="is.running.macos"/>
+        <compilerarg value="x86_64" if="is.running.macos"/>
+        <compilerarg value="-I/System/Library/Frameworks/JavaVM.framework/Headers"
+                   if="is.running.macos"/>
+        <compilerarg value="-I../../.." if="is.running.macos"/>
+
+        <linkerarg value="-o" location="end" if="is.running.macos"/>
+        <linkerarg value="libglobalshortcut.jnilib" location="end"
+                   if="is.running.macos"/>
+        <linkerarg value="-arch" if="is.running.macos"/>
+        <linkerarg value="x86_64" if="is.running.macos"/>
+        <linkerarg value="-framework" if="is.running.macos"/>
+        <linkerarg value="Foundation" if="is.running.macos"/>
+        <linkerarg value="-framework" if="is.running.macos"/>
+        <linkerarg value="Carbon" if="is.running.macos"/>
+        <linkerarg value="-framework" if="is.running.macos"/>
+        <linkerarg value="Cocoa" if="is.running.macos"/>
+
+        <fileset dir="src/native/globalshortcut"
+                 includes="*.m" if="is.running.macos"/>
+        <fileset dir="." includes="DDHotKeyCenter.m" if="is.running.macos"/>
+
+        <compilerarg value="-m32" if="cross_32" unless="is.running.macos" />
+        <compilerarg value="-m64" if="cross_64" unless="is.running.macos" />
+
+        <linkerarg value="-m32" if="cross_32" unless="is.running.macos" />
+        <linkerarg value="-m64" if="cross_64" unless="is.running.macos" />
+    </cc>
+  </target>
+
+  <target name="globalshortcut-windows"
+          description="Build globalshortcut shared library for Windows"
+          if="is.running.windows"
+          depends="init-native">
+      <echo message="Windows sources are in jitsi project. Use the targets there to produce the binary."/>
+  </target>
+
+  <!-- Cleanup object files and shared libraries -->
+  <target name="clean-native" description="Clean all object files and libraries.">
+    <delete failonerror="false" includeemptydirs="true">
+        <fileset dir="${obj}" />
+        <fileset dir="src/native/" includes="*.dll *.so *.dyld *.jnilib *.manifest *.o *.obj *.lib *.exp history.xml" />
+        <fileset dir="." includes="**.dll *.so *.dyld *.jnilib *.manifest *.o *.obj *.lib *.exp history.xml" />
+    </delete>
+  </target>
+
+  <!-- Help, print useful targets -->
+  <target name="help-native">
+    <echo message="Targets available:" />
+    <echo message="'ant globalshortcut' to compile globalshortcut shared library" />
+    <echo message="" />
+    <echo message="Options:" />
+    <echo message="-Darch: cross-compile for 32-bit (-Darch=32), 64-bit (-Darch=64). Windows users have to use gcc >= 4.5." />
+    <echo message="" />
+  </target>
+
+</project>

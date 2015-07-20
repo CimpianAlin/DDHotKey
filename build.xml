@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="globalshortcut-mac">
+
+  <property name="native.libs" value="lib/native"/>
+  <property environment="system"/>
+
+  <!-- mac specific properties -->
+  <condition property="is.running.macos" value="${os.name}">
+    <os family="mac"/>
+  </condition>
+
+  <!-- Import JNI build xml -->
+  <import file="src/native/build.xml"/>
+
+  <target
+      name="clean"
+      depends="clean-native"
+      description="Remove all compiled/generated files and prepare for a clean compile/build."/>
+
+</project>
